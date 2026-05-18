@@ -1,0 +1,14 @@
+{
+  "include": ["."],
+  "extraPaths": [".", "LLM Parser"],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["LLM Parser"]
+    },
+    {
+      "root": "LLM Parser",
+      "extraPaths": ["."]
+    }
+  ]
+}
