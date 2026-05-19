@@ -1,4 +1,4 @@
-# Bio Scheduler
+# Biologically Aware Human Scheduler
 
 Bio Scheduler turns plain English task descriptions into a calendar-aware study and work schedule. It parses tasks, deadlines, energy level, blocked time, dependencies, and schedule pressure, then solves the schedule with either CP-SAT or NSGA-II.
 
