@@ -96,8 +96,12 @@ USER_CONTEXT SCHEMA (extract whenever the user mentions mood, availability, meet
   avoided_task_ids           : array of strings — task names from this batch the user
                                wants to defer or skip if possible.
 
+  chronotype                 : string = one of "lark", "neutral", "owl" | null
+                               "morning person", "early bird" → "lark"
+                               "night owl", "work best at night" → "owl"
+                               Omit or null if not stated (defaults to "neutral").
+
   notes                      : string -> preserve salient user wording about their situation, or ""
-  date                       : string -> explicit calendar date if the user gives one, or ""
 
 CLARIFICATION_QUESTIONS:
   Ask only when a task cannot be scheduled without a missing fact.
@@ -147,10 +151,10 @@ Output:
     "blocked_hours": [],
     "deadline_pressure_mode": false,
     "deadline_pressure_intensity": "moderate",
+    "chronotype": null,
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "",
-    "date": ""
+    "notes": ""
   },
   "clarification_questions": []
 }
@@ -183,8 +187,7 @@ Output:
     "deadline_pressure_intensity": "moderate",
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "",
-    "date": ""
+    "notes": ""
   },
   "clarification_questions": []
 }
@@ -217,8 +220,7 @@ Output:
     "deadline_pressure_intensity": "moderate",
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "",
-    "date": ""
+    "notes": ""
   },
   "clarification_questions": []
 }
@@ -264,8 +266,7 @@ Output:
     "deadline_pressure_intensity": "moderate",
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "",
-    "date": ""
+    "notes": ""
   },
   "clarification_questions": []
 }
@@ -298,8 +299,7 @@ Output:
     "deadline_pressure_intensity": "moderate",
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "",
-    "date": ""
+    "notes": ""
   },
   "clarification_questions": []
 }
@@ -330,10 +330,10 @@ Output:
     "blocked_hours": [["day_0", 14.0, 17.0]],
     "deadline_pressure_mode": true,
     "deadline_pressure_intensity": "moderate",
+    "chronotype": null,
     "preferred_task_ids": [],
     "avoided_task_ids": [],
-    "notes": "I'm exhausted today, I have lab from 2 to 5, but I can work late if needed.",
-    "date": ""
+    "notes": "I'm exhausted today, I have lab from 2 to 5, but I can work late if needed."
   },
   "clarification_questions": []
 }

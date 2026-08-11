@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import List, Tuple, Optional, Dict
 
 # Scoring Weights
@@ -40,6 +41,7 @@ class Resource:
     name: str
     capacity: float
     work_slots: Tuple[Tuple[float, float], ...] = ((0.0, 24.0),)
+    weekday: int = 0  # 0=Mon, 1=Tue, ..., 6=Sun
 
 
 @dataclass
@@ -120,10 +122,22 @@ def find_earliest_slot_chunk(
     return None
 
 
-def generate_dynamic_calendar(tasks: List[Task]) -> List[Resource]:
-    # Generate a calendar whose days carry realistic work-slots.
+def generate_dynamic_calendar(
+    tasks: List[Task],
+    start_date: Optional[date] = None,
+) -> List[Resource]:
+    """Generate a calendar whose days carry realistic work-slots.
+
+    day_0 is anchored to ``start_date`` (defaults to today) so that
+    weekday names, capacities, and recurring blocks align with reality.
+    """
     if not tasks:
         return []
+
+    if start_date is None:
+        start_date = datetime.now().date()
+
+    start_weekday = start_date.weekday()  # 0=Mon
 
     max_deadline = max(task.deadline for task in tasks)
     total_days_needed = math.ceil(max_deadline / 24.0)
@@ -141,9 +155,10 @@ def generate_dynamic_calendar(tasks: List[Task]) -> List[Resource]:
     return [
         Resource(
             id=f"day_{i}",
-            name=f"Day {i + 1} ({day_names[i % 7]})",
-            capacity=weekly_capacities[i % 7],
+            name=f"Day {i + 1} ({day_names[(start_weekday + i) % 7]})",
+            capacity=weekly_capacities[(start_weekday + i) % 7],
             work_slots=DEFAULT_WORK_SLOTS,
+            weekday=(start_weekday + i) % 7,
         )
         for i in range(total_days_needed)
     ]

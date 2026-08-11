@@ -26,3 +26,7 @@ preferences.json
 .idea/
 .DS_Store
 Thumbs.db
+
+preferences.json
+user_profile.json
+last_schedule.txt
