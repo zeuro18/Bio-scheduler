@@ -2,6 +2,37 @@ from models import Resource
 from typing import List, Optional, Dict, Set, Tuple
 from dataclasses import dataclass, field
 
+# ---------------------------------------------------------------------------
+# Circadian fitness curves: local_hour → cognitive fitness (0.0–1.0)
+# Based on chronobiology research on alertness across the day.
+# ---------------------------------------------------------------------------
+
+CIRCADIAN_CURVES: Dict[str, Dict[int, float]] = {
+    "lark": {
+        7: 0.6, 8: 0.9, 9: 1.0, 10: 1.0, 11: 0.9, 12: 0.7,
+        13: 0.4, 14: 0.3, 15: 0.5, 16: 0.7, 17: 0.6,
+        18: 0.4, 19: 0.3, 20: 0.2,
+    },
+    "neutral": {
+        9: 0.8, 10: 1.0, 11: 1.0, 12: 0.7, 13: 0.4, 14: 0.3,
+        15: 0.5, 16: 0.8, 17: 0.9, 18: 0.7, 19: 0.5,
+        20: 0.4, 21: 0.3,
+    },
+    "owl": {
+        9: 0.3, 10: 0.4, 11: 0.5, 12: 0.6, 13: 0.5, 14: 0.4,
+        15: 0.5, 16: 0.7, 17: 0.8, 18: 0.9, 19: 1.0,
+        20: 1.0, 21: 0.9, 22: 0.8, 23: 0.6,
+    },
+}
+
+VALID_CHRONOTYPES = {"lark", "neutral", "owl"}
+
+
+def circadian_score(chronotype: str, local_hour: int) -> float:
+    """Return cognitive fitness (0.0–1.0) for a chronotype at a given hour."""
+    curve = CIRCADIAN_CURVES.get(chronotype, CIRCADIAN_CURVES["neutral"])
+    return curve.get(local_hour, 0.5)
+
 
 @dataclass
 class UserContext:
@@ -10,6 +41,7 @@ class UserContext:
     blocked_hours: List[tuple] = field(default_factory=list)
 
     energy_level: Optional[int] = None  # 1 to 10 scale. 1 being the most fatigued
+    chronotype: str = "neutral"  # "lark", "neutral", or "owl"
     deadline_pressure_mode: bool = False
     deadline_pressure_intensity: str = "moderate"
     preferred_task_ids: Set[str] = field(default_factory=set)
@@ -71,6 +103,57 @@ def apply_context(base_cal: List[Resource], context: UserContext) -> List[Resour
                 name=resource.name,
                 capacity=new_capacity,
                 work_slots=final_slots,
+                weekday=resource.weekday,
+            )
+        )
+
+    return effective
+
+
+def apply_profile(
+    base_cal: List[Resource],
+    profile,  # UserProfile (imported lazily to avoid circular import)
+) -> List[Resource]:
+    """Apply persistent profile to base calendar.
+
+    - Carves out recurring weekly blocks (gym, lab, lectures)
+    - Replaces default work slots with custom per-weekday slots if defined
+
+    Runs BEFORE apply_context (profile = permanent, context = transient overlay).
+    """
+    effective = []
+    for resource in base_cal:
+        wd = resource.weekday
+        new_slots = resource.work_slots
+        new_capacity = resource.capacity
+
+        # Apply custom work slots for this weekday
+        wd_key = str(wd)
+        if wd_key in profile.custom_work_slots:
+            custom = profile.custom_work_slots[wd_key]
+            if custom:
+                new_slots = tuple(tuple(s) for s in custom)
+                new_capacity = sum(e - s for s, e in new_slots)
+
+        # Carve out recurring blocks for this weekday
+        blocks_today = [
+            (b.start_hour, b.end_hour)
+            for b in profile.recurring_blocks
+            if b.weekday == wd
+        ]
+        if blocks_today:
+            new_slots = carve_out_blocked(new_slots, blocks_today)
+            new_capacity = min(
+                new_capacity, sum(e - s for s, e in new_slots)
+            )
+
+        effective.append(
+            Resource(
+                id=resource.id,
+                name=resource.name,
+                capacity=new_capacity,
+                work_slots=new_slots,
+                weekday=wd,
             )
         )
 

@@ -126,10 +126,15 @@ def _parse_user_context(raw_ctx: Dict[str, Any]) -> UserContext:
     notes = str(raw_ctx.get("notes") or "").strip()
     date = str(raw_ctx.get("date") or "").strip()
 
+    chronotype_raw = raw_ctx.get("chronotype")
+    valid_chronotypes = {"lark", "neutral", "owl"}
+    chronotype = str(chronotype_raw) if chronotype_raw in valid_chronotypes else "neutral"
+
     return UserContext(
         capacity_override=capacity_override,
         blocked_hours=blocked_hours,
         energy_level=energy_level,
+        chronotype=chronotype,
         deadline_pressure_mode=deadline_pressure_mode,
         deadline_pressure_intensity=deadline_pressure_intensity,
         preferred_task_ids=preferred_task_ids,

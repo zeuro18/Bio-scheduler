@@ -103,22 +103,75 @@ def compute_daily_fatigue(
     return fatigue
 
 
+def _day_sort_key(resource_id: str) -> int:
+    """Extract numeric index from 'day_2' etc. for chronological ordering."""
+    try:
+        return int(resource_id.split("_", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+CARRYOVER_RATE = 0.3  # 30% of excess fatigue carries into next day
+
+
+def _compute_circadian_penalty(
+    result: ScheduleResult,
+    tasks: List[Task],
+    user_context: Optional[UserContext] = None,
+    avoid_heavy_evening: bool = False,
+) -> Dict[str, float]:
+    """Per-day circadian misalignment penalty.
+
+    High-cog tasks placed in low-fitness hours get penalised.
+    If avoid_heavy_evening is True, extra penalty for cog>=6 tasks after 18:00.
+    Returns {resource_id: penalty}.
+    """
+    from context import circadian_score
+
+    task_map = {t.id: t for t in tasks}
+    chronotype = "neutral"
+    if user_context is not None:
+        chronotype = getattr(user_context, "chronotype", "neutral")
+
+    penalty: Dict[str, float] = {}
+    for entry in result.scheduled:
+        task = task_map.get(entry.task_id)
+        if task is None:
+            continue
+        local_h = int(entry.start_time or 0) % 24
+        fitness = circadian_score(chronotype, local_h)
+        # Misalignment: high-cog task in low-fitness hour
+        mis = (task.cognitive_weight / 10.0) * (1.0 - fitness)
+        # Extra penalty for heavy tasks in the evening
+        if avoid_heavy_evening and local_h >= 18 and task.cognitive_weight >= 6:
+            mis += 0.5 * (task.cognitive_weight / 10.0)
+        rid = entry.resource_id
+        penalty[rid] = penalty.get(rid, 0.0) + mis
+
+    return penalty
+
+
 def compute_fatigue_objective(
     result: ScheduleResult,
     tasks: List[Task],
     calendar: List[Resource],
     user_context: Optional[UserContext] = None,
+    avoid_heavy_evening: bool = False,
 ) -> float:
-    """Scalar fatigue penalty.
+    """Scalar fatigue penalty with cross-day carryover and circadian alignment.
 
     threshold = 20 + 2 * energy_level  (if set), else 35.
-    objective = sum(max(0, fatigue[d] - threshold)^2) + 0.01 * max_fatigue
 
-    Low-energy users get a lower threshold so moderate cognitive load is
-    penalised. High-energy users tolerate more. This is a soft preference,
-    not a hard constraint.
+    Each day's effective fatigue = cognitive_load + circadian_misalignment + carryover.
+    Excess above threshold carries 30% into the next day, so back-to-back heavy
+    days compound while light recovery days reset the accumulator.
+
+    objective = sum(max(0, effective[d] - threshold)^2) + 0.01 * max_fatigue
     """
     daily_fatigue = compute_daily_fatigue(result, tasks, calendar)
+    circadian_penalty = _compute_circadian_penalty(
+        result, tasks, user_context, avoid_heavy_evening=avoid_heavy_evening,
+    )
 
     energy = None
     if user_context is not None:
@@ -129,11 +182,20 @@ def compute_fatigue_objective(
     else:
         threshold = 35.0
 
+    sorted_days = sorted(calendar, key=lambda r: _day_sort_key(r.id))
+
     overload_sum = 0.0
     max_fatigue = 0.0
-    for fat in daily_fatigue.values():
+    carryover = 0.0
+
+    for day in sorted_days:
+        fat = daily_fatigue.get(day.id, 0.0)
+        fat += circadian_penalty.get(day.id, 0.0)
+        fat += carryover
         max_fatigue = max(max_fatigue, fat)
-        overload_sum += max(0.0, fat - threshold) ** 2
+        excess = max(0.0, fat - threshold)
+        overload_sum += excess ** 2
+        carryover = excess * CARRYOVER_RATE
 
     return overload_sum + 0.01 * max_fatigue
 
@@ -213,13 +275,17 @@ def evaluate_objectives(
     tasks: List[Task],
     calendar: List[Resource],
     user_context: Optional[UserContext] = None,
+    avoid_heavy_evening: bool = False,
 ) -> ObjectiveVector:
     """Compute all four schedule-quality objectives.
 
     Hard constraints are NOT checked here -- call validate_solution() separately.
     """
     return ObjectiveVector(
-        fatigue=compute_fatigue_objective(result, tasks, calendar, user_context),
+        fatigue=compute_fatigue_objective(
+            result, tasks, calendar, user_context,
+            avoid_heavy_evening=avoid_heavy_evening,
+        ),
         context_switches=compute_context_switch_objective(result, tasks, calendar),
         deadline_risk=compute_deadline_risk_objective(result, tasks),
         fragmentation=compute_fragmentation_objective(result, tasks),

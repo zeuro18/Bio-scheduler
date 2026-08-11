@@ -29,13 +29,14 @@ for _p in (_PARSER_DIR, _ROOT):
 load_dotenv(os.path.join(_ROOT, ".env"))
 load_dotenv(os.path.join(_PARSER_DIR, ".env"), override=True)
 
-from context import UserContext
+from context import UserContext, apply_profile
 from display import print_schedule
 from models import Task, generate_dynamic_calendar
 from objectives import ObjectiveVector, evaluate_objectives
 from preferences import PreferenceProfile, load_preferences, save_preferences, update_preferences_from_feedback
 from solver_cpsat import solve_cpsat
 from true_llm_parser import NLTaskParser, ParseResult, resolve_spread_on_result
+from user_profile import UserProfile, load_profile, save_profile
 from validate import validate_solution
 
 
@@ -75,7 +76,7 @@ def print_objective_summary(obj: ObjectiveVector) -> None:
     print(f"\n{sep}")
     print("Objective Vector")
     print(sep)
-    print(f"  Fatigue overload  : {obj.fatigue:.2f}  (lower = less cognitive overload)")
+    print(f"  Fatigue overload  : {obj.fatigue:.2f}  (lower = less overload; includes circadian alignment & cross-day carryover)")
     print(f"  Context switches  : {obj.context_switches:.0f}  (lower = better focus)")
     print(f"  Deadline risk     : {obj.deadline_risk:.2f}  (lower = more breathing room)")
     print(f"  Fragmentation     : {obj.fragmentation:.0f}  (lower = tasks more consolidated)")
@@ -99,6 +100,29 @@ def _calendar_seed_tasks(result: ParseResult) -> List[Task]:
             )
         )
     return seed_tasks
+def _save_schedule_summary(schedule, tasks: List[Task], calendar: List[Resource]) -> None:
+    """Save a text summary of the schedule to last_schedule.txt for LLM context."""
+    try:
+        task_map = {t.id: t for t in tasks}
+        lines = []
+        for day in calendar:
+            day_entries = [e for e in schedule.scheduled if e.resource_id == day.id]
+            if not day_entries:
+                continue
+            day_entries.sort(key=lambda x: x.start_time or 0)
+            lines.append(f"{day.name}:")
+            for e in day_entries:
+                t = task_map.get(e.task_id)
+                if not t:
+                    continue
+                start_h = e.start_time or 0
+                end_h = start_h + (e.allocated_hours or 0)
+                lines.append(f"  {start_h:02.0f}:00 - {end_h:02.0f}:00 : {t.name} (cog: {t.cognitive_weight})")
+        with open("last_schedule.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+    except Exception:
+        pass
+
 
 
 def _run_cpsat_path(tasks, base_calendar, user_context, verbose):
@@ -121,6 +145,7 @@ def _run_cpsat_path(tasks, base_calendar, user_context, verbose):
     if not ok:
         print("\n[FAIL] Validation failed -- schedule violates hard constraints.")
         return 1
+    _save_schedule_summary(schedule, tasks, effective_cal)
 
     return 0
 
@@ -146,7 +171,17 @@ def _run_nsga_path(
             print(f"\n[PREFS] Loaded v{profile.version} from '{preferences_path}'")
 
         if feedback_text:
-            profile, explanations = update_preferences_from_feedback(profile, feedback_text)
+            schedule_summary = ""
+            try:
+                if os.path.exists("last_schedule.txt"):
+                    with open("last_schedule.txt", "r", encoding="utf-8") as f:
+                        schedule_summary = f.read()
+            except OSError:
+                pass
+
+            profile, explanations = update_preferences_from_feedback(
+                profile, feedback_text, schedule_summary
+            )
             sep = "-" * 64
             print(f"\n{sep}")
             print("Preference Update from Feedback")
@@ -183,7 +218,10 @@ def _run_nsga_path(
     if note:
         print(f"\n{note}")
 
-    print_schedule(best_schedule, tasks, effective_cal, title="NSGA-II Best Schedule")
+    title = "NSGA-II Best Schedule"
+    if note and "Falling back to CP-SAT" in note:
+        title = "CP-SAT Fallback Schedule"
+    print_schedule(best_schedule, tasks, effective_cal, title=title)
 
     obj = evaluate_objectives(best_schedule, tasks, effective_cal, user_context)
     print_objective_summary(obj)
@@ -208,6 +246,7 @@ def _run_nsga_path(
     if not ok:
         print("\n[FAIL] Final validation failed -- schedule violates hard constraints.")
         return 1
+    _save_schedule_summary(best_schedule, tasks, effective_cal)
 
     return 0
 
@@ -240,6 +279,17 @@ def run_schedule(
         return 1
 
     base_calendar = generate_dynamic_calendar(calendar_seed_tasks)
+
+    # Apply persistent profile (recurring blocks, custom work slots)
+    profile_path = "user_profile.json"
+    user_prof = load_profile(profile_path)
+    base_calendar = apply_profile(base_calendar, user_prof)
+    if verbose:
+        if user_prof.recurring_blocks:
+            print(f"\n[PROFILE] Applied {len(user_prof.recurring_blocks)} recurring block(s)")
+        if user_prof.chronotype != "neutral":
+            print(f"[PROFILE] Chronotype: {user_prof.chronotype}")
+
     parsed = resolve_spread_on_result(parsed, base_calendar)
     print_parsed(parsed)
 
@@ -249,6 +299,16 @@ def run_schedule(
 
     tasks = parsed.tasks
     user_context = parsed.user_context
+
+    # Merge chronotype: LLM-parsed overrides profile, but if LLM didn't set one, use profile
+    if user_context.chronotype == "neutral" and user_prof.chronotype != "neutral":
+        user_context.chronotype = user_prof.chronotype
+    elif user_context.chronotype != "neutral" and user_context.chronotype != user_prof.chronotype:
+        # User stated a new chronotype this session — persist it
+        user_prof.chronotype = user_context.chronotype
+        save_profile(user_prof, profile_path)
+        if verbose:
+            print(f"[PROFILE] Updated chronotype to '{user_context.chronotype}'")
 
     if optimizer == "cpsat":
         return _run_cpsat_path(tasks, base_calendar, user_context, verbose)

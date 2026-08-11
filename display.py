@@ -27,6 +27,8 @@ def describe_time_slot(
     """Return slot label for an allocation inside a day."""
     start_local = start_hour_abs % 24
     end_local = end_hour_abs % 24
+    if end_local == 0.0 and start_local != 0.0:
+        end_local = 24.0
 
     for slot_start, slot_end in day.work_slots:
         if start_local >= slot_start and end_local <= slot_end:

@@ -177,6 +177,12 @@ def decode_candidate(
                 if my_hours_on_day:
                     avail.sort(key=lambda h: min(abs(h - mh) for mh in my_hours_on_day))
 
+            # Circadian alignment: prefer peak-fitness hours for heavy tasks
+            if task.cognitive_weight >= 6:
+                from context import circadian_score
+                chrono = getattr(user_context, "chronotype", "neutral")
+                avail.sort(key=lambda h: -circadian_score(chrono, h % 24))
+
             hours_this_day = min(needed - allocated_count, int(cap_left), len(avail))
             selected = avail[:hours_this_day]
 
@@ -260,6 +266,7 @@ class SchedulingNSGAProblem(ElementwiseProblem):
         calendar: List[Resource],
         user_context: UserContext,
         max_penalty: float = INVALID_PENALTY,
+        avoid_heavy_evening: bool = False,
     ) -> None:
         n_var = len(tasks) + 4
         super().__init__(
@@ -270,6 +277,7 @@ class SchedulingNSGAProblem(ElementwiseProblem):
         self.calendar = calendar
         self.user_context = user_context
         self.max_penalty = max_penalty
+        self.avoid_heavy_evening = avoid_heavy_evening
         self._cache: Dict[Tuple[float, ...], CandidateSchedule] = {}
 
     def _make_key(self, x: np.ndarray) -> Tuple[float, ...]:
@@ -303,7 +311,10 @@ class SchedulingNSGAProblem(ElementwiseProblem):
         valid = validate_solution(result, self.tasks, debug=False, calendar=self.calendar)
 
         if valid:
-            objectives = evaluate_objectives(result, self.tasks, self.calendar, self.user_context)
+            objectives = evaluate_objectives(
+                result, self.tasks, self.calendar, self.user_context,
+                avoid_heavy_evening=self.avoid_heavy_evening,
+            )
             note = ""
         else:
             objectives = ObjectiveVector(*([self.max_penalty] * 4))
@@ -358,6 +369,14 @@ def select_pareto_solution(
         w_deadline *= preference_profile.deadline_risk_weight
         w_frag *= preference_profile.fragmentation_weight
 
+        # Boolean preference flags
+        if preference_profile.prefer_long_blocks:
+            w_switches *= 1.5
+        if preference_profile.avoid_heavy_evening:
+            w_fatigue *= 1.3
+        if preference_profile.prefer_compact_schedule:
+            w_frag *= 1.5
+
     weights = np.array([w_fatigue, w_switches, w_deadline, w_frag])
 
     obj_matrix = np.array([c.objectives.as_list() for c in valid], dtype=float)
@@ -401,11 +420,52 @@ def run_nsga(
             return None, note, [], effective_calendar
 
     # Run NSGA-II
+    _avoid_eve = (
+        preference_profile.avoid_heavy_evening
+        if preference_profile is not None
+        else False
+    )
     problem = SchedulingNSGAProblem(
         tasks=tasks, calendar=effective_calendar,
         user_context=user_context, max_penalty=config.max_invalid_penalty,
+        avoid_heavy_evening=_avoid_eve,
     )
-    algorithm = NSGA2(pop_size=config.population_size)
+    
+    # Seed initial population
+    n_var = len(tasks) + 4
+    X_init = np.random.uniform(0, 1, size=(config.population_size, n_var))
+    
+    seed_idx = 0
+    if cpsat_result is not None:
+        starts = {}
+        for entry in cpsat_result.scheduled:
+            starts[entry.task_id] = min(starts.get(entry.task_id, float('inf')), float(entry.start_time or 0))
+        
+        horizon = max(1, len(effective_calendar) * 24)
+        for i, t in enumerate(tasks):
+            if t.id in starts:
+                X_init[seed_idx, i] = max(0.0, min(1.0, 1.0 - (starts[t.id] / horizon)))
+            else:
+                X_init[seed_idx, i] = 0.0
+        X_init[seed_idx, len(tasks):] = [0.5, 0.5, 0.5, 0.5]
+        seed_idx += 1
+        
+    # Priority seed
+    if seed_idx < config.population_size:
+        for i, t in enumerate(tasks):
+            X_init[seed_idx, i] = t.priority / 10.0
+        X_init[seed_idx, len(tasks):] = [0.5, 0.5, 0.5, 0.5]
+        seed_idx += 1
+        
+    # Deadline urgency seed
+    if seed_idx < config.population_size:
+        for i, t in enumerate(tasks):
+            horizon = max(1, len(effective_calendar) * 24)
+            X_init[seed_idx, i] = max(0.0, min(1.0, 1.0 - (t.deadline / horizon)))
+        X_init[seed_idx, len(tasks):] = [0.5, 0.5, 0.5, 0.5]
+        seed_idx += 1
+
+    algorithm = NSGA2(pop_size=config.population_size, sampling=X_init)
     termination = get_termination("n_gen", config.generations)
 
     try:

@@ -677,6 +677,7 @@ def solve_cpsat(
                     name=day.name,
                     capacity=day.capacity + added,
                     work_slots=tuple(slots),
+                    weekday=day.weekday,
                 )
             )
         return out

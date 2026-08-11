@@ -45,20 +45,16 @@ def resolve_spread(
             )
             spread_n = max_days
 
-        effort = 0.0
-        fallback_days = 0
-        for day_idx in range(spread_n):
-            if day_idx < len(daily_capacity):
-                effort += daily_capacity[day_idx]
-            else:
-                effort += DEFAULT_HOURS_PER_DAY
-                fallback_days += 1
+        DEFAULT_SESSION_HOURS = 3.0
+        MAX_SESSION_HOURS = 5.0
+        
+        effort = float(spread_n * DEFAULT_SESSION_HOURS)
+        effort = min(effort, float(spread_n * MAX_SESSION_HOURS))
 
-        if fallback_days:
+        if spread_n > len(daily_capacity):
             warnings.append(
                 f"Task '{task['name']}': calendar has only {len(daily_capacity)} days "
-                f"but spread_days={spread_n}. Used {DEFAULT_HOURS_PER_DAY}h/day "
-                f"fallback for {fallback_days} day(s)."
+                f"but spread_days={spread_n}. Assuming {DEFAULT_SESSION_HOURS}h per session."
             )
 
         task["effort_hours"] = round(effort, 2)
