@@ -136,7 +136,7 @@ I have lab today from 2pm to 5pm and I am low energy.
 | `compare.py` | Greedy vs CP-SAT comparison utility |
 | `dag.py` | Dependency graph and topological ordering |
 | `evaluate.py` | Schedule quality and feasibility metrics |
-| `test_solver.py` | CP-SAT smoke tests and solver comparison |
+| `test_solver.py` | CP-SAT tests and solver comparison |
 | `LLM Parser/true_llm_parser.py` | Groq-backed natural language parser |
 | `LLM Parser/postprocessing.py` | Parser output normalization and feasibility checks |
 | `LLM Parser/calendar_spread_resolver.py` | Converts spread-based tasks into effort hours |
@@ -225,7 +225,7 @@ While CP-SAT solves for binary mathematical feasibility, **NSGA-II optimizes the
 
 ## Testing
 
-Run the CP-SAT smoke tests:
+Run the CP-SAT tests:
 
 ```bash
 python test_solver.py
