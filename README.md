@@ -188,7 +188,7 @@ Evaluation of the CP-SAT solver against the baseline greedy scheduler on synthet
 | 30 | 88.9% | 0.86 | **100.0%** | **1.00** | 1,866 ms |
 | 50 | 80.7% | 0.79 | **100.0%** | **1.00** | 8,447 ms |
 
-### Biological & Schedule Quality Metrics
+### Biological & Schedule Quality Metrics (CP-SAT vs Baseline)
 | Tasks (N) | Metric | Greedy Baseline | CP-SAT Solver | Improvement |
 |:---:|---|:---:|:---:|:---:|
 | **10** | **Deadline Misses (count)** | 0.67 | **0.00** | **100% eliminated** |
@@ -209,7 +209,19 @@ Evaluation of the CP-SAT solver against the baseline greedy scheduler on synthet
 | | **Feasibility Score (0-1)** | 0.79 | **1.00** | +26% adherence |
 | | **Critical Path Pressure** | 1.02 (violation) | **1.00** | Zero deadline breaches |
 
-*Note: All generated CP-SAT schedules are independently formally validated across 6 constraint categories (duration, overlap, dependencies, deadlines, daily capacity, and allowed work-slot windows) via `validate.py`.*
+### NSGA-II Multi-Objective Biological Optimization
+While CP-SAT solves for binary mathematical feasibility, **NSGA-II optimizes the 4-dimensional biological quality vector** (`objectives.py`) across the Pareto frontier:
+
+| Metric (Lower is Better) | Scale | Greedy | CP-SAT (Feasibility) | NSGA-II (Bio-Optimizer) | NSGA-II Improvement vs CP-SAT |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Cognitive Fatigue Penalty** | $N=10$ | 153.97 | 138.04 | **69.25** | **-49.8% lower fatigue variance** |
+| **Context Switching (Interruption count)** | $N=10$ | 7.00 | 16.33 | **5.00** | **-69.4% fewer task switches** |
+| **Deadline Risk Score** | $N=10$ | $6.6 \times 10^5$ | 7.65 | **0.74** | **-90.3% risk reduction** |
+| **Task Fragmentation (Days scattered)** | $N=10$ | 11.67 | 18.00 | **11.00** | **-38.9% less fragmented** |
+| **Context Switching (Interruption count)** | $N=30$ | 26.67 | 63.00 | **48.33** | **-23.3% fewer task switches** |
+| **Task Fragmentation (Days scattered)** | $N=30$ | 38.33 | 78.67 | **61.00** | **-22.5% less fragmented** |
+
+*Note: All generated CP-SAT and NSGA-II schedules are independently formally validated across 6 constraint categories (duration, overlap, dependencies, deadlines, daily capacity, and allowed work-slot windows) via `validate.py`.*
 
 ## Testing
 
