@@ -104,7 +104,7 @@ class ParseResult:
         return [task.to_dict() for task in self.parsed_tasks]
 
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "qwen/qwen3.8-27b"
 
 
 class _GroqClient:
