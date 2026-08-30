@@ -56,8 +56,6 @@ from validate import validate_solution
 
 @dataclass
 class NSGAConfig:
-    """Tuning knobs for the NSGA-II optimisation run."""
-
     population_size: int = 80
     generations: int = 80
     seed: int = 42
@@ -69,8 +67,6 @@ class NSGAConfig:
 
 @dataclass
 class CandidateSchedule:
-    """A decoded and evaluated candidate from the NSGA population."""
-
     result: ScheduleResult
     objectives: ObjectiveVector
     raw_x: List[float]
@@ -112,12 +108,10 @@ def decode_candidate(
     deadline_b = float(x[n + 1])
     compactness_b = float(x[n + 2])
     switch_b = float(x[n + 3])
-
     occupied: Set[int] = set()
     day_used: Dict[int, float] = {i: 0.0 for i in range(len(calendar))}
     task_finish_hour: Dict[str, int] = {}
     completed: Set[str] = set()
-
     scheduled: List[ScheduledTask] = []
     resource_usage: Dict[str, float] = {r.id: 0.0 for r in calendar}
 
@@ -407,7 +401,8 @@ def run_nsga(
     effective_calendar = apply_context(base_calendar, user_context)
 
     # CP-SAT preflight: confirm feasibility exists
-    cpsat_result = cpsat_note = cpsat_cal = None
+    cpsat_result = cpsat_note = None
+    cpsat_cal = effective_calendar
     if config.use_cpsat_fallback:
         cpsat_result, cpsat_note, cpsat_cal = solve_cpsat(
             tasks, base_calendar, user_context, debug=False, time_limit=10.0,

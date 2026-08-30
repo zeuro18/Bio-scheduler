@@ -185,6 +185,130 @@ TEST_CASES = [
             ],
         },
     },
+    # ------------------------------------------------------------------
+    # 6. Implicit Priority
+    # ------------------------------------------------------------------
+    {
+        "id": "implicit_priority",
+        "description": "No explicit priority stated — parser must infer from urgency language",
+        "input": "I absolutely need to finish my visa application, it takes 2 hours and is due in 6 hours.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "visa", "duration_hours": 2.0, "deadline_hours": 6.0}]},
+    },
+    # ------------------------------------------------------------------
+    # 7. Low Cognitive Admin
+    # ------------------------------------------------------------------
+    {
+        "id": "low_cognitive_admin",
+        "description": "Low-effort admin task with explicit low cognitive weight",
+        "input": "Reply to two emails, 20 minutes total, due in 3 hours, priority 4, cognitive weight 1.",
+        "expect": {"count": 1, "tasks": [{"duration_hours": 0.33, "deadline_hours": 3.0, "priority": 4, "cognitive_weight": 1}]},
+    },
+    # ------------------------------------------------------------------
+    # 8. Three Way Dependency Chain
+    # ------------------------------------------------------------------
+    {
+        "id": "three_way_dependency_chain",
+        "description": "Three tasks chained A -> B -> C",
+        "input": "Collect data for the project, 3 hours, due in 200 hours, priority 6, cognitive weight 5. "
+                 "Then clean the data, 2 hours, due in 210 hours, priority 6, cognitive weight 4, depends on collecting data. "
+                 "Then run the analysis, 4 hours, due in 230 hours, priority 7, cognitive weight 7, depends on cleaning the data.",
+        "expect": {"count": 3, "tasks": [
+            {"name_contains": "collect", "dependency_count": 0},
+            {"name_contains": "clean", "dependency_count": 1},
+            {"name_contains": "analysis", "dependency_count": 1},
+        ]},
+    },
+    # ------------------------------------------------------------------
+    # 9. Diamond Dependency
+    # ------------------------------------------------------------------
+    {
+        "id": "diamond_dependency",
+        "description": "Two parallel tasks both feeding into a final task",
+        "input": "Write the intro section, 2 hours, due in 100 hours, priority 6, cognitive weight 5. "
+                 "Write the results section, 3 hours, due in 100 hours, priority 6, cognitive weight 6. "
+                 "Combine into final draft, 1 hour, due in 120 hours, priority 8, cognitive weight 4, depends on intro and results.",
+        "expect": {"count": 3, "tasks": [
+            {"name_contains": "intro", "dependency_count": 0},
+            {"name_contains": "results", "dependency_count": 0},
+            {"name_contains": "combine", "dependency_count": 2},
+        ]},
+    },
+    # ------------------------------------------------------------------
+    # 10. Spread Days Phrasing
+    # ------------------------------------------------------------------
+    {
+        "id": "spread_days_phrasing",
+        "description": "Effort given as a day-spread hint instead of raw hours",
+        "input": "I need to work on my capstone project, it'll take about 3 days, due in 10 days, priority 8, cognitive weight 7.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "capstone", "deadline_hours": 240.0, "priority": 8, "cognitive_weight": 7}]},
+    },
+    # ------------------------------------------------------------------
+    # 11. Evenings Spread Phrasing
+    # ------------------------------------------------------------------
+    {
+        "id": "evenings_spread_phrasing",
+        "description": "Effort given as '2 evenings' instead of raw hours",
+        "input": "Study for the midterm, need 2 evenings, due in 5 days, priority 9, cognitive weight 8.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "midterm", "deadline_hours": 120.0, "priority": 9, "cognitive_weight": 8}]},
+    },
+    # ------------------------------------------------------------------
+    # 12. Five Task Batch
+    # ------------------------------------------------------------------
+    {
+        "id": "five_task_batch",
+        "description": "Five unrelated tasks in one message — stresses batch extraction",
+        "input": "Finish the lit review, 4 hours, due in 96 hours, priority 7, cognitive weight 6. "
+                 "Book flights for the conference, 1 hour, due in 48 hours, priority 5, cognitive weight 2. "
+                 "Prep slides, 3 hours, due in 72 hours, priority 8, cognitive weight 6. "
+                 "Grade student assignments, 5 hours, due in 120 hours, priority 6, cognitive weight 5. "
+                 "Renew gym membership, 0.25 hours, due in 200 hours, priority 2, cognitive weight 1.",
+        "expect": {"count": 5},
+    },
+    # ------------------------------------------------------------------
+    # 13. Context Low Energy
+    # ------------------------------------------------------------------
+    {
+        "id": "context_low_energy",
+        "description": "Task input combined with an energy/context statement",
+        "input": "Write my research proposal, 6 hours, due in 72 hours, priority 8, cognitive weight 9. I'm feeling really low energy today.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "proposal", "duration_hours": 6.0, "cognitive_weight": 9}]},
+    },
+    # ------------------------------------------------------------------
+    # 14. Context Blocked Lab
+    # ------------------------------------------------------------------
+    {
+        "id": "context_blocked_lab",
+        "description": "Task input combined with a blocked-time / lab statement",
+        "input": "Finish the circuits homework, 3 hours, due in 48 hours, priority 7, cognitive weight 6. I have lab today from 1pm to 4pm.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "circuits", "duration_hours": 3.0, "deadline_hours": 48.0}]},
+    },
+    # ------------------------------------------------------------------
+    # 15. Crunch Time Urgent
+    # ------------------------------------------------------------------
+    {
+        "id": "crunch_time_urgent",
+        "description": "Very tight deadline, high urgency phrasing",
+        "input": "Emergency — fix the production bug right now, should take 1 hour, absolutely must be done in 2 hours, top priority.",
+        "expect": {"count": 1, "tasks": [{"duration_hours": 1.0, "deadline_hours": 2.0, "priority": 10}]},
+    },
+    # ------------------------------------------------------------------
+    # 16. Vague No Numbers
+    # ------------------------------------------------------------------
+    {
+        "id": "vague_no_numbers",
+        "description": "No explicit numbers at all — hardest case, tests inference quality",
+        "input": "I should probably get started on my thesis soon, it's pretty important and somewhat demanding.",
+        "expect": {"count": 1, "tasks": [{"name_contains": "thesis"}]},
+    },
+    # ------------------------------------------------------------------
+    # 17. Casual Phrasing No Structure
+    # ------------------------------------------------------------------
+    {
+        "id": "casual_phrasing_no_structure",
+        "description": "Casual, run-on phrasing instead of clean template style",
+        "input": "ugh ok so i need to knock out my chem lab report today, maybe 2 hrs, gotta have it in by tomorrow night, its kind of a pain (weight like 7?) and its pretty important, priority 8 i guess",
+        "expect": {"count": 1, "tasks": [{"name_contains": "chem", "duration_hours": 2.0}]},
+    },
 ]
 
 

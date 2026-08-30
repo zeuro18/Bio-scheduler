@@ -176,6 +176,41 @@ The NSGA-II path searches for schedules that balance:
 
 It uses CP-SAT as a feasibility fallback when configured through `run_e2e.py`.
 
+## Benchmarks & Evaluation
+
+Evaluation of the CP-SAT solver against the baseline greedy scheduler on synthetic multi-day workloads (~65% calendar utilization) averaged across multiple random seeds (`evaluate.py` & `benchmark_solvers.py`):
+
+### Overall Scalability & Feasibility
+| Tasks (N) | Greedy Sched% | Greedy Feas. | CP-SAT Sched% | CP-SAT Feas. | CP-SAT Time (ms) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 10 | 86.7% | 0.80 | **100.0%** | **1.00** | 176 ms |
+| 20 | 91.7% | 0.90 | **100.0%** | **1.00** | 619 ms |
+| 30 | 88.9% | 0.86 | **100.0%** | **1.00** | 1,866 ms |
+| 50 | 80.7% | 0.79 | **100.0%** | **1.00** | 8,447 ms |
+
+### Biological & Schedule Quality Metrics
+| Tasks (N) | Metric | Greedy Baseline | CP-SAT Solver | Improvement |
+|:---:|---|:---:|:---:|:---:|
+| **10** | **Deadline Misses (count)** | 0.67 | **0.00** | **100% eliminated** |
+| | **Dependency Violations** | 0.00 | **0.00** | Guaranteed valid |
+| | **Peak Daily Fatigue** | 39.67 | **31.00** | **-21.8% burnout spike** |
+| | **Feasibility Score (0-1)** | 0.80 | **1.00** | +25% adherence |
+| **20** | **Deadline Misses (count)** | 0.33 | **0.00** | **100% eliminated** |
+| | **Dependency Violations** | 0.00 | **0.00** | Guaranteed valid |
+| | **Peak Daily Fatigue** | 60.67 | **60.33** | Smoothed load |
+| | **Feasibility Score (0-1)** | 0.90 | **1.00** | +11% adherence |
+| **30** | **Deadline Misses (count)** | 1.00 | **0.00** | **100% eliminated** |
+| | **Dependency Violations** | 0.00 | **0.00** | Guaranteed valid |
+| | **Peak Daily Fatigue** | 50.00 | **45.67** | **-8.7% burnout spike** |
+| | **Feasibility Score (0-1)** | 0.86 | **1.00** | +16% adherence |
+| **50** | **Deadline Misses (count)** | 1.00 | **0.00** | **100% eliminated** |
+| | **Dependency Violations** | 0.00 | **0.00** | Guaranteed valid |
+| | **Peak Daily Fatigue** | 60.67 | **52.67** | **-13.2% burnout spike** |
+| | **Feasibility Score (0-1)** | 0.79 | **1.00** | +26% adherence |
+| | **Critical Path Pressure** | 1.02 (violation) | **1.00** | Zero deadline breaches |
+
+*Note: All generated CP-SAT schedules are independently formally validated across 6 constraint categories (duration, overlap, dependencies, deadlines, daily capacity, and allowed work-slot windows) via `validate.py`.*
+
 ## Testing
 
 Run the CP-SAT smoke tests:

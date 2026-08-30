@@ -59,7 +59,7 @@ from hour_index import HourIndex
 from models import Resource, ScheduledTask, Task, ScheduleResult, UnscheduledTask
 from validate import validate_solution
 
-DEFAULT_MAX_CHUNKS = 7  # max distinct days a task may be spread across
+DEFAULT_MAX_CHUNKS = 10  # max distinct days a task may be spread across
 DEFAULT_SOLVE_LIMIT = 30.0  # seconds before solver gives up
 
 
@@ -562,11 +562,16 @@ def solve_cpsat(
     This means a user who is already in 'extreme' pressure mode never gets downgraded.
     """
 
-    # Apply user context once — never touched again by the relaxation loop.
+    # Apply user context once which is never touched again by the relaxation loop.
     effective_cal = apply_context(base_calendar, ctx)
 
-    # PRE-FLIGHT: identify tasks that are structurally impossible before any
-    # solving attempt.  A task is structurally infeasible if HourIndex finds
+    t0_global = time.time()
+
+    def _get_remaining_time() -> float:
+        return max(0.1, time_limit - (time.time() - t0_global))
+
+    # identify tasks that are structurally impossible before any
+    # solving attempt. A task is infeasible if HourIndex finds
     # zero valid work-slot hours for it, most commonly because its deadline
     # falls before the first work slot of the day (e.g. deadline=4h but work
     # starts at hour 9).  Including such tasks in the CP-SAT model makes the
@@ -647,7 +652,7 @@ def solve_cpsat(
         tasks,
         effective_cal,
         max_chunks,
-        time_limit,
+        _get_remaining_time(),
         debug,
         "Tier 1: Original constraints",
         objective_weights,
@@ -696,7 +701,7 @@ def solve_cpsat(
         tasks,
         effective_cal2,
         max_chunks,
-        time_limit,
+        _get_remaining_time(),
         debug,
         "Tier 2: Mild overtime (+1 h/day)",
         objective_weights,
@@ -714,7 +719,7 @@ def solve_cpsat(
         tasks,
         effective_cal3,
         max_chunks,
-        time_limit,
+        _get_remaining_time(),
         debug,
         "Tier 3: Moderate overtime (+2 h/day)",
         objective_weights,
@@ -732,7 +737,7 @@ def solve_cpsat(
         tasks,
         effective_cal4,
         max_chunks,
-        time_limit,
+        _get_remaining_time(),
         debug,
         "Tier 4: Extreme overtime (+4 h/day)",
         objective_weights,
@@ -752,7 +757,7 @@ def solve_cpsat(
         tasks,
         effective_cal4,
         relaxed_chunks,
-        time_limit,
+        _get_remaining_time(),
         debug,
         f"Tier 5: Relaxed chunks ({relaxed_chunks})",
         objective_weights,
@@ -798,7 +803,7 @@ def solve_cpsat(
             remaining_tasks,
             effective_cal4,
             relaxed_chunks,
-            time_limit,
+            _get_remaining_time(),
             False,  # suppress inner debug on retries
             f"Tier 6: Dropped {[t.id for t in dropped]}",
             objective_weights,
